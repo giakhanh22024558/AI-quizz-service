@@ -85,6 +85,51 @@ def submit_essay():
     response = model.generate_content(prompt)
     return jsonify({"ai_feedback": response.text})
 
+# New endpoint: accept JSON like {"17": "666"} and return same keys with feedback
+@app.route("/submit_essay_json", methods=["POST"])
+def submit_essay_json():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "Invalid payload, expected JSON object mapping question id to answer"}), 400
+
+    # Compose prompt that asks the model to return JSON mapping id -> feedback only
+    prompt = (
+        "Bạn là giáo viên. Đọc các câu tự luận sau và đưa ra gợi ý đáp án ngắn, chính xác cho từng câu.\n"
+        "Trả về **JSON thuần** theo định dạng {\"<id>\": \"<feedback>\", ...} và không thêm chữ nào khác.\n"
+    )
+    for qid, ans in data.items():
+        prompt += f"{qid}: {ans}\n"
+
+    model = genai.GenerativeModel("gemini-2.5-flash")
+    response = model.generate_content(prompt)
+
+    # Try to parse JSON from the model response
+    try:
+        feedback_map = json.loads(response.text)
+    except json.JSONDecodeError:
+        match = re.search(r"\{.*\}", response.text, re.DOTALL)
+        if match:
+            try:
+                feedback_map = json.loads(match.group(0))
+            except json.JSONDecodeError:
+                feedback_map = None
+        else:
+            feedback_map = None
+
+    # Fallback: if the model didn't return parseable JSON, ask per-question and collect feedback
+    if not isinstance(feedback_map, dict):
+        feedback_map = {}
+        for qid, ans in data.items():
+            q_prompt = (
+                "Bạn là giáo viên. Đưa ra gợi ý đáp án ngắn và cụ thể cho câu tự luận sau. "
+                "Trả về **chỉ** nội dung gợi ý (không JSON, không tiêu đề):\n\n"
+                f"Question ID: {qid}\nAnswer: {ans}\n"
+            )
+            r = model.generate_content(q_prompt)
+            feedback_map[str(qid)] = r.text.strip()
+
+    return jsonify(feedback_map)
+
 @app.route("/generate", methods=["POST"])
 def generate():
     data = request.get_json(silent=True) or {}
@@ -105,6 +150,7 @@ Bạn là giáo viên giỏi. Tạo đề kiểm tra Python:
 - Trình độ: {level}
 - {numMCQ} câu trắc nghiệm và {numEssay} câu tự luận
 - Trả về **JSON chuẩn** theo cấu trúc:
+- Với mỗi đáp án trong options, luôn chèn ký tự đáp án vào trước với format ví dụ "A. Câu trả lời" và answers sẽ chứa các ký tự đó của đáp án đúng
 {{
   "mcq": [
     {{"question": "...", "options": ["A","B","C","D"], "answer": "..." }},
