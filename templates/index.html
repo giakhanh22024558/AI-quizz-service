@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <title>AI Quiz Generator</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f9f9f9;
+      margin: 0;
+      padding: 0 20px;
+    }
+    h2 {
+      text-align: center;
+      color: #333;
+      margin-top: 30px;
+    }
+    form {
+      max-width: 600px;
+      margin: 20px auto;
+      padding: 20px;
+      background-color: #fff;
+      border-radius: 10px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    label {
+      display: block;
+      margin-bottom: 10px;
+      font-weight: bold;
+    }
+    input[type="text"], input[type="number"], textarea {
+      width: 100%;
+      padding: 8px;
+      margin-top: 5px;
+      border-radius: 5px;
+      border: 1px solid #ccc;
+      box-sizing: border-box;
+    }
+    button {
+      display: block;
+      width: 100%;
+      padding: 10px;
+      margin-top: 15px;
+      background-color: #4CAF50;
+      color: white;
+      font-size: 16px;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #45a049;
+    }
+    .quiz-container {
+      max-width: 800px;
+      margin: 30px auto;
+      padding: 20px;
+      background-color: #fff;
+      border-radius: 10px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    .mcq-question, .essay-question {
+      margin-bottom: 20px;
+    }
+    /* Khung cố định cho câu hỏi và đáp án */
+    .question-box {
+      max-width: 700px;
+      overflow-wrap: break-word;
+      border: 1px solid #ccc;
+      padding: 10px;
+      border-radius: 5px;
+      background-color: #f4f4f4;
+      margin-bottom: 5px;
+      white-space: pre-wrap;
+    }
+    .essay-question textarea {
+      width: 100%;
+      resize: vertical;
+      box-sizing: border-box;
+    }
+  </style>
+
+  <!-- MathJax để render LaTeX -->
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+</head>
+<body>
+  <h2>AI Quiz Generator</h2>
+
+  <form method="POST">
+    <label>Bài học:</label>
+    <input type="text" name="lesson" required>
+
+    <label>Trình độ:</label>
+    <input type="text" name="level" required>
+
+    <label>Số câu trắc nghiệm:</label>
+    <input type="number" name="numMCQ" required>
+
+    <label>Số câu tự luận:</label>
+    <input type="number" name="numEssay" required>
+
+    <button type="submit">Tạo đề kiểm tra</button>
+  </form>
+
+  {% if quiz %}
+    <div class="quiz-container">
+      <h3>📘 Đề kiểm tra:</h3>
+
+      <!-- Trắc nghiệm -->
+      <form id="mcq-form">
+        <h4>I. Trắc nghiệm</h4>
+        {% for q in quiz.mcq %}
+        <div class="mcq-question">
+          <p><strong>Câu {{ loop.index }}:</strong></p>
+
+          <!-- Khung LaTeX hiển thị câu hỏi và đáp án -->
+          <div class="question-box">
+            $$
+            \begin{aligned}
+            &\text{ {{ q.question }} } \\
+            &\text{ {{ q.options[0] }} } \\
+            &\text{ {{ q.options[1] }} } \\
+            &\text{ {{ q.options[2] }} } \\
+            &\text{ {{ q.options[3] }} }
+            \end{aligned}
+            $$
+          </div>
+
+          <!-- Nút radio button riêng để chọn đáp án -->
+          <div>
+            <label><input type="radio" name="q{{ loop.index }}" value="A"> A</label>
+            <label><input type="radio" name="q{{ loop.index }}" value="B"> B</label>
+            <label><input type="radio" name="q{{ loop.index }}" value="C"> C</label>
+            <label><input type="radio" name="q{{ loop.index }}" value="D"> D</label>
+          </div>
+        </div>
+        {% endfor %}
+        <button type="button" onclick="submitMCQ()">Nộp trắc nghiệm</button>
+      </form>
+
+      <!-- Tự luận -->
+      <form id="essay-form">
+        <h4>II. Tự luận</h4>
+        {% for q in quiz.essay %}
+        <div class="essay-question">
+          <p><strong>Câu {{ loop.index }}:</strong></p>
+          <div class="question-box">
+            {{ q.question_html|safe }}
+          </div>
+          <textarea name="essay{{ loop.index }}" rows="5"></textarea>
+        </div>
+        {% endfor %}
+        <button type="button" onclick="submitEssay()">Gửi tự luận</button>
+      </form>
+    </div>
+
+    <script>
+      // Render LaTeX trong quiz
+      MathJax.typesetPromise();
+
+      function submitMCQ() {
+        const form = document.getElementById("mcq-form");
+        const formData = new FormData(form);
+
+        fetch("/submit_mcq", {
+          method: "POST",
+          body: formData
+        }).then(res => res.json())
+          .then(data => alert("Điểm trắc nghiệm: " + data.score + "/{{ quiz.mcq|length }}"));
+      }
+
+      function submitEssay() {
+        const form = document.getElementById("essay-form");
+        const formData = new FormData(form);
+
+        fetch("/submit_essay", {
+          method: "POST",
+          body: formData
+        }).then(res => res.json())
+          .then(data => alert("Câu trả lời tự luận đã được gửi tới AI.\nGợi ý đáp án:\n" + data.ai_feedback));
+      }
+    </script>
+  {% endif %}
+</body>
+</html>
